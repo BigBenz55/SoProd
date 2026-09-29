@@ -1,0 +1,218 @@
+@import '@fontsource-variable/bodoni-moda/opsz.css';
+@import '@fontsource-variable/bodoni-moda/opsz-italic.css';
+@import '@fontsource-variable/jost/wght.css';
+@import 'tailwindcss';
+
+@theme {
+  --color-ink: #0b0b0b;
+  --color-satin: #151515;
+  --color-paper: #ffffff;
+  --color-mist: #f3f3f2;
+  --color-graphite: #5b5b5b;
+  --color-silver: #a9a9a9;
+  --color-line: rgb(11 11 11 / 0.12);
+  --color-line-strong: rgb(11 11 11 / 0.28);
+  --color-line-inverse: rgb(255 255 255 / 0.18);
+
+  --font-display: 'Bodoni Moda Variable', 'Bodoni 72', 'Didot', serif;
+  --font-sans: 'Jost Variable', 'Futura', 'Avenir Next', system-ui, sans-serif;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-paper font-sans text-ink;
+    font-weight: 380;
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+  ::selection {
+    background: var(--color-ink);
+    color: var(--color-paper);
+  }
+  :focus-visible {
+    outline: 1px solid currentColor;
+    outline-offset: 4px;
+  }
+  h1, h2, h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  img {
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+}
+
+/* Letterpress small capitals — used on controls and metadata, never stacked above a heading. */
+@utility caps {
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 450;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+
+@utility display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 0.95;
+}
+
+@utility btn {
+  @apply caps inline-flex items-center justify-center gap-3 px-7 py-4 transition-[background-color,color,border-color,box-shadow,opacity] duration-300 ease-out-quart;
+  min-height: 3rem;
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+  }
+}
+
+@layer components {
+  /* Engraved double rule, as on a printed invitation card. */
+  .rule-double {
+    height: 4px;
+    border-top: 1px solid currentColor;
+    border-bottom: 1px solid currentColor;
+    opacity: 0.35;
+  }
+
+  /* The vellum interleaf of a wedding album: translucent, faintly frosted paper. */
+  .vellum {
+    background: rgb(255 255 255 / 0.72);
+    backdrop-filter: blur(14px) saturate(0.4);
+    -webkit-backdrop-filter: blur(14px) saturate(0.4);
+    box-shadow: 0 30px 80px -30px rgb(0 0 0 / 0.45);
+  }
+  .vellum-dark {
+    background: rgb(11 11 11 / 0.55);
+    backdrop-filter: blur(16px) saturate(0.3);
+    -webkit-backdrop-filter: blur(16px) saturate(0.3);
+  }
+
+  .btn-ink {
+    @apply btn bg-ink text-paper hover:bg-satin;
+    box-shadow: inset 0 0 0 1px var(--color-ink);
+  }
+  .btn-paper {
+    @apply btn bg-paper text-ink hover:bg-mist;
+  }
+  .btn-line {
+    @apply btn text-current;
+    box-shadow: inset 0 0 0 1px currentColor;
+  }
+  .btn-line:not(:disabled):hover {
+    @apply bg-ink text-paper;
+    box-shadow: inset 0 0 0 1px var(--color-ink);
+  }
+  .btn-line-inverse:not(:disabled):hover {
+    @apply bg-paper text-ink;
+    box-shadow: inset 0 0 0 1px var(--color-paper);
+  }
+
+  .link-under {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-size: 0 1px;
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    transition: background-size 0.5s var(--ease-out-expo);
+  }
+  .link-under:hover,
+  .link-under[aria-current='page'] {
+    background-size: 100% 1px;
+  }
+
+  .field {
+    @apply w-full border-0 bg-transparent px-0 py-3 text-base text-ink outline-none transition-[box-shadow] duration-300 placeholder:text-graphite;
+    box-shadow: inset 0 -1px 0 var(--color-line-strong);
+  }
+  .field:focus {
+    box-shadow: inset 0 -2px 0 var(--color-ink);
+  }
+  .field-label {
+    @apply caps block text-graphite;
+  }
+  .field-inverse {
+    @apply text-paper placeholder:text-silver;
+    box-shadow: inset 0 -1px 0 var(--color-line-inverse);
+  }
+  .field-inverse:focus {
+    box-shadow: inset 0 -2px 0 var(--color-paper);
+  }
+}
+
+@layer utilities {
+  /* Film grain for black fields; the host must be positioned. */
+  .grain::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.16;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.6' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 2.2 0 0 0 -1'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+}
+
+/* The one authored motion: the vellum sheet lifts off the photograph as you scroll. */
+@keyframes vellum-lift {
+  to {
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(-6vh);
+  }
+}
+@keyframes photo-settle {
+  from {
+    transform: scale(1.08);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+@supports (animation-timeline: scroll()) {
+  .vellum-lift {
+    clip-path: inset(0 0 0 0);
+    animation: vellum-lift linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 85vh;
+  }
+  .photo-settle {
+    animation: photo-settle linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 100vh;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+.enter {
+  animation: fade-up 1.1s var(--ease-out-expo) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .vellum-lift, .photo-settle {
+    animation: none !important;
+  }
+}

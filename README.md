@@ -49,7 +49,7 @@ npm run build
 node .output/server/index.mjs     # écoute sur PORT (3000 par défaut)
 ```
 
-Variables à définir sur le serveur : celles de `.env.example`. Le dossier `NUXT_DATA_DIR` doit être persistant et inscriptible. Node.js ≥ 22.19 est recommandé (Nuxt 4.5).
+Variables à définir sur le serveur : celles de `.env.example`. Le dossier `NUXT_DATA_DIR` doit être persistant et inscriptible. **Node.js ≥ 22.19** est requis (Nuxt 4.5 + SQLite intégré à Node, sans `better-sqlite3` à compiler sur l’hébergeur).
 
 ## À remplacer avant la mise en ligne
 

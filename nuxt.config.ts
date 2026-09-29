@@ -45,7 +45,7 @@ export default defineNuxtConfig({
   },
 
   nitro: {
-    externals: { external: ['better-sqlite3', 'sharp', 'ssh2', 'ssh2-sftp-client'] },
+    externals: { external: ['sharp', 'ssh2', 'ssh2-sftp-client'] },
   },
 
   vite: {

@@ -8,7 +8,7 @@ web
 
 ## Stack
 
-Nuxt 4 (Vue 3 + Nitro server), SQLite (better-sqlite3), sharp for WebP proxies, basic-ftp / ssh2-sftp-client for the Box, Tailwind CSS v4. The source spec asked for PHP 8.2 on Hostinger shared hosting; the user explicitly switched to Nuxt. Deployment therefore needs a Node.js-capable host (Hostinger Node.js web app plan or VPS).
+Nuxt 4 (Vue 3 + Nitro server), SQLite (`node:sqlite`, pas de module natif), sharp for WebP proxies, basic-ftp / ssh2-sftp-client for the Box, Tailwind CSS v4. The source spec asked for PHP 8.2 on Hostinger shared hosting; the user explicitly switched to Nuxt. Deployment therefore needs a Node.js-capable host (Hostinger Node.js web app plan or VPS).
 
 ## Users
 

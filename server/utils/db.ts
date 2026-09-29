@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3'
+import { DatabaseSync } from 'node:sqlite'
 
 export type EventType = 'mariage' | 'corporate' | 'studio'
 export type MediaKind = 'image' | 'video'
@@ -41,13 +41,13 @@ export interface MediaRow {
   cached: number
 }
 
-let db: Database.Database | null = null
+let db: DatabaseSync | null = null
 
 export function useDb() {
   if (db) return db
-  db = new Database(dataPaths().db)
-  db.pragma('journal_mode = WAL')
-  db.pragma('foreign_keys = ON')
+  db = new DatabaseSync(dataPaths().db)
+  db.exec('PRAGMA journal_mode = WAL')
+  db.exec('PRAGMA foreign_keys = ON')
   db.exec(`
     CREATE TABLE IF NOT EXISTS galleries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -1,5 +1,7 @@
+import { sqlRun } from '../../../../utils/sql-engine'
+
 export default defineEventHandler(async (event) => {
-  const g = requireGallery(event)
+  const g = await requireGallery(event)
   const body = await readBody<GalleryInput & { removePin?: boolean; regenerateLinks?: boolean }>(event)
   validateGalleryInput(body, false)
 
@@ -29,7 +31,7 @@ export default defineEventHandler(async (event) => {
   }
 
   if (sets.length) {
-    useDb().prepare(`UPDATE galleries SET ${sets.join(', ')} WHERE id = ?`).run(...values, g.id)
+    await sqlRun(`UPDATE galleries SET ${sets.join(', ')} WHERE id = ?`, [...values, g.id])
   }
-  return adminGalleryView(getGallery(g.id)!)
+  return adminGalleryView((await getGallery(g.id))!)
 })

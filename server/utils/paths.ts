@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs'
-import { resolve, join } from 'node:path'
+import { dirname, resolve, join } from 'node:path'
 
 let resolved: { data: string; cache: string; db: string } | null = null
 
@@ -8,8 +8,15 @@ export function dataPaths() {
   const config = useRuntimeConfig()
   const data = resolve(process.cwd(), config.dataDir || './.data')
   const cache = join(data, 'cache')
-  mkdirSync(cache, { recursive: true })
-  resolved = { data, cache, db: join(data, 'soprod.db') }
+  const db = join(data, 'soprod.db')
+  try {
+    mkdirSync(dirname(db), { recursive: true })
+    mkdirSync(cache, { recursive: true })
+  } catch (err) {
+    console.error('[soprod] NUXT_DATA_DIR inaccessible :', data, err)
+    throw err
+  }
+  resolved = { data, cache, db }
   return resolved
 }
 

@@ -1,6 +1,7 @@
+import { sqlRun } from '../../../../utils/sql-engine'
+
 export default defineEventHandler(async (event) => {
-  const g = requireGallery(event)
-  await purgeCache(g.id)
-  useDb().prepare('DELETE FROM galleries WHERE id = ?').run(g.id)
+  const g = await requireGallery(event)
+  await sqlRun('DELETE FROM galleries WHERE id = ?', [g.id])
   return { ok: true }
 })

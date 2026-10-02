@@ -4,24 +4,18 @@ export default defineEventHandler(async (event) => {
   const validity = Number(body.validityDays ?? 60)
   if (!isValidityChoice(validity)) throw createError({ statusCode: 422, message: 'Validité du lien invalide.' })
 
-  const { id } = useDb()
-    .prepare(`
-      INSERT INTO galleries (name, event_date, event_type, folder, private_token, public_token, pin_hash, public_download, validity_days, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      RETURNING id
-    `)
-    .get(
-      body.name!.trim(),
-      body.eventDate || null,
-      body.eventType ?? 'mariage',
-      body.folder ? cleanRemotePath(body.folder) : null,
-      newToken(),
-      newToken(),
-      body.pin ? hashPin(body.pin) : null,
-      body.publicDownload ? 1 : 0,
-      validity,
-      expiresAtForValidity(validity),
-    ) as { id: number }
+  const id = await insertGalleryRow({
+    name: body.name!.trim(),
+    event_date: body.eventDate || null,
+    event_type: body.eventType ?? 'mariage',
+    folder: body.folder ? cleanRemotePath(body.folder) : null,
+    private_token: newToken(),
+    public_token: newToken(),
+    pin_hash: body.pin ? hashPin(body.pin) : null,
+    public_download: body.publicDownload ? 1 : 0,
+    validity_days: validity,
+    expires_at: expiresAtForValidity(validity),
+  })
 
-  return adminGalleryView(getGallery(id)!)
+  return adminGalleryView((await getGallery(id))!)
 })

@@ -1,4 +1,5 @@
 import { posix } from 'node:path'
+import { sqlNow, sqlRun } from './sql-engine'
 
 export interface IndexJob {
   galleryId: number
@@ -48,23 +49,23 @@ export function startIndexing(galleryId: number, force = false) {
     finishedAt: null,
   }
   jobs.set(galleryId, job)
-  const task = runIndexing(job, force).catch((err) => {
+  const task = runIndexing(job, force).catch(async (err) => {
     job.state = 'error'
     job.errors.push(String(err?.message ?? err))
     job.finishedAt = Date.now()
-    useDb()
-      .prepare(`UPDATE galleries SET status = 'error', status_message = ? WHERE id = ?`)
-      .run(String(err?.message ?? err), galleryId)
+    await sqlRun(`UPDATE galleries SET status = 'error', status_message = ? WHERE id = ?`, [
+      String(err?.message ?? err),
+      galleryId,
+    ])
   })
   indexTasks.set(galleryId, task)
   return job
 }
 
 async function runIndexing(job: IndexJob, force: boolean) {
-  const db = useDb()
-  const gallery = getGallery(job.galleryId)
+  const gallery = await getGallery(job.galleryId)
   if (!gallery?.folder) throw new Error('Aucun dossier sélectionné pour cette galerie')
-  db.prepare(`UPDATE galleries SET status = 'indexing', status_message = NULL WHERE id = ?`).run(gallery.id)
+  await sqlRun(`UPDATE galleries SET status = 'indexing', status_message = NULL WHERE id = ?`, [gallery.id])
 
   const storage = useBox()
   const files = await walk(gallery.folder)
@@ -84,22 +85,17 @@ async function runIndexing(job: IndexJob, force: boolean) {
     (IMAGE_EXT.has(extOf(f.name)) && !posterPaths.has(f.path)) || VIDEO_EXT.has(extOf(f.name)),
   )
 
-  const existing = new Map(listMedia(gallery.id).map(m => [m.path, m]))
+  const existing = new Map((await listMedia(gallery.id)).map(m => [m.path, m]))
   const keep = new Set(items.map(i => i.path))
-  for (const [path, m] of existing) {
-    if (!keep.has(path)) db.prepare('DELETE FROM media WHERE id = ?').run(m.id)
+  for (const [, m] of existing) {
+    if (!keep.has(m.path)) await sqlRun('DELETE FROM media WHERE id = ?', [m.id])
   }
 
-  const upsert = db.prepare(`
-    INSERT INTO media (gallery_id, path, filename, kind, size_bytes, position, poster_path)
-    VALUES (@gallery_id, @path, @filename, @kind, @size_bytes, @position, @poster_path)
-    ON CONFLICT (gallery_id, path) DO UPDATE SET
-      size_bytes = excluded.size_bytes, position = excluded.position, poster_path = excluded.poster_path
-    RETURNING id
-  `)
-  const rows = items.map((item, position) => {
+  const rows: { id: number; kind: string; item: StorageEntry }[] = []
+  for (let position = 0; position < items.length; position++) {
+    const item = items[position]
     const kind = VIDEO_EXT.has(extOf(item.name)) ? 'video' : 'image'
-    const { id } = upsert.get({
+    const id = await upsertMediaItem({
       gallery_id: gallery.id,
       path: item.path,
       filename: posix.basename(item.path),
@@ -107,16 +103,13 @@ async function runIndexing(job: IndexJob, force: boolean) {
       size_bytes: item.size,
       position,
       poster_path: posters.get(item.path)?.path ?? null,
-    }) as { id: number }
-    return { id, kind, item }
-  })
+    })
+    rows.push({ id, kind, item })
+  }
 
   job.state = 'processing'
   job.total = rows.length
 
-  const update = db.prepare(
-    'UPDATE media SET width = ?, height = ?, tone = ?, cached = 1 WHERE id = ?',
-  )
   const queue = [...rows]
   const worker = async () => {
     while (queue.length) {
@@ -129,15 +122,30 @@ async function runIndexing(job: IndexJob, force: boolean) {
           if (row.kind === 'image') {
             const buffer = await readToBuffer(await storage.read(row.item.path))
             const meta = await buildImageVariants(gallery.id, row.id, buffer)
-            update.run(meta.width, meta.height, meta.tone, row.id)
+            await sqlRun('UPDATE media SET width = ?, height = ?, tone = ?, cached = 1 WHERE id = ?', [
+              meta.width,
+              meta.height,
+              meta.tone,
+              row.id,
+            ])
           } else {
             const poster = posters.get(row.item.path)
             if (poster) {
               const buffer = await readToBuffer(await storage.read(poster.path))
               const meta = await buildPoster(gallery.id, row.id, buffer)
-              update.run(meta.width, meta.height, '#111111', row.id)
+              await sqlRun('UPDATE media SET width = ?, height = ?, tone = ?, cached = 1 WHERE id = ?', [
+                meta.width,
+                meta.height,
+                '#111111',
+                row.id,
+              ])
             } else {
-              update.run(1920, 1080, '#111111', row.id)
+              await sqlRun('UPDATE media SET width = ?, height = ?, tone = ?, cached = 1 WHERE id = ?', [
+                1920,
+                1080,
+                '#111111',
+                row.id,
+              ])
             }
           }
         }
@@ -149,13 +157,16 @@ async function runIndexing(job: IndexJob, force: boolean) {
   }
   await Promise.all([worker(), worker()])
 
-  const g = getGallery(gallery.id)
+  const g = await getGallery(gallery.id)
   if (g && (!g.cover_media_id || !keep.size || !rows.some(r => r.id === g.cover_media_id))) {
     const firstImage = rows.find(r => r.kind === 'image')
-    db.prepare('UPDATE galleries SET cover_media_id = ? WHERE id = ?').run(firstImage?.id ?? null, gallery.id)
+    await sqlRun('UPDATE galleries SET cover_media_id = ? WHERE id = ?', [firstImage?.id ?? null, gallery.id])
   }
-  db.prepare(`UPDATE galleries SET status = 'ready', indexed_at = datetime('now'), status_message = ? WHERE id = ?`)
-    .run(job.errors.length ? `${job.errors.length} fichier(s) en erreur` : null, gallery.id)
+  await sqlRun(`UPDATE galleries SET status = 'ready', indexed_at = ?, status_message = ? WHERE id = ?`, [
+    sqlNow(),
+    job.errors.length ? `${job.errors.length} fichier(s) en erreur` : null,
+    gallery.id,
+  ])
 
   job.current = null
   job.state = 'done'

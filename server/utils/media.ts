@@ -71,5 +71,5 @@ export async function cacheSize(galleryId: number) {
 
 export async function purgeCache(galleryId: number) {
   await fsp.rm(galleryCacheDir(galleryId), { recursive: true, force: true })
-  useDb().prepare('UPDATE media SET cached = 0 WHERE gallery_id = ?').run(galleryId)
+  await sqlRun('UPDATE media SET cached = 0 WHERE gallery_id = ?', [galleryId])
 }

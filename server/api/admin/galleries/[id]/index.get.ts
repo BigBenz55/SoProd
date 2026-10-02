@@ -1,6 +1,6 @@
 export default defineEventHandler(async (event) => {
-  const g = requireGallery(event)
-  const media = listMedia(g.id).map(m => ({
+  const g = await requireGallery(event)
+  const media = (await listMedia(g.id)).map(m => ({
     id: m.id,
     kind: m.kind,
     filename: m.filename,

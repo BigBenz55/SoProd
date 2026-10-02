@@ -1,4 +1,5 @@
 import type { H3Event } from 'h3'
+import { sqlGet } from './sql-engine'
 
 export type AccessRole = 'client' | 'guest'
 
@@ -28,11 +29,11 @@ export function setUnlocked(event: H3Event, g: GalleryRow) {
   })
 }
 
-export function resolveAccess(event: H3Event, token: string | undefined): GalleryAccess {
+export async function resolveAccess(event: H3Event, token: string | undefined): Promise<GalleryAccess> {
   if (!token || !UUID_RE.test(token)) throw createError({ statusCode: 404, message: 'Galerie introuvable' })
-  const db = useDb()
-  const privateHit = db.prepare('SELECT * FROM galleries WHERE private_token = ?').get(token) as GalleryRow | undefined
-  const gallery = privateHit ?? (db.prepare('SELECT * FROM galleries WHERE public_token = ?').get(token) as GalleryRow | undefined)
+  const privateHit = await sqlGet<GalleryRow>('SELECT * FROM galleries WHERE private_token = ?', [token])
+  const gallery =
+    privateHit ?? (await sqlGet<GalleryRow>('SELECT * FROM galleries WHERE public_token = ?', [token]))
   if (!gallery) throw createError({ statusCode: 404, message: 'Galerie introuvable' })
 
   const role: AccessRole = privateHit ? 'client' : 'guest'
@@ -45,8 +46,8 @@ export function resolveAccess(event: H3Event, token: string | undefined): Galler
 }
 
 /** Access check for every media/favourite endpoint: token valid, not expired, PIN satisfied. */
-export function requireViewer(event: H3Event) {
-  const access = resolveAccess(event, getRouterParam(event, 'token'))
+export async function requireViewer(event: H3Event) {
+  const access = await resolveAccess(event, getRouterParam(event, 'token'))
   if (isExpired(access.gallery) && !isAdmin(event)) throw createError({ statusCode: 410, message: 'Galerie expirée' })
   if (!access.unlocked) throw createError({ statusCode: 403, message: 'Code PIN requis' })
   return access

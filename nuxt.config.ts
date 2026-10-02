@@ -22,6 +22,16 @@ export default defineNuxtConfig({
     adminPassword: '',
     sessionSecret: '',
     dataDir: './.data',
+    db: {
+      driver: 'sqlite',
+      mysql: {
+        host: '',
+        port: 3306,
+        database: '',
+        user: '',
+        password: '',
+      },
+    },
     storage: {
       driver: 'local',
       root: './demo-box',
@@ -45,7 +55,7 @@ export default defineNuxtConfig({
   },
 
   nitro: {
-    externals: { external: ['sharp', 'ssh2', 'ssh2-sftp-client'] },
+    externals: { external: ['sharp', 'ssh2', 'ssh2-sftp-client', 'mysql2'] },
   },
 
   vite: {

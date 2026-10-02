@@ -1,5 +1,5 @@
 export default defineEventHandler(async (event) => {
-  const access = resolveAccess(event, getRouterParam(event, 'token'))
+  const access = await resolveAccess(event, getRouterParam(event, 'token'))
   const { gallery } = access
   if (access.unlocked) return { ok: true }
 

@@ -21,9 +21,9 @@ npm run dev               # http://localhost:3000
 
 | Élément | Où |
 |---|---|
-| Originaux (JPG, MP4…) | Disque de la Box, via FTP/FTPS ou SFTP (`NUXT_STORAGE_DRIVER`) |
-| Miniatures WebP (grille 800 px, visionneuse 2048 px ≈ 100–250 Ko, invités 1280 px) | `.data/cache/<galerie>/` |
-| Base de données (SQLite) | `.data/soprod.db` |
+| **Originaux** (JPG, MP4…) | Disque de la **Box**, lus par le site via **FTP/FTPS ou SFTP** (`NUXT_STORAGE_*`) — ce n’est pas une base SQL |
+| **Métadonnées** (galeries, tokens, PIN, liste des fichiers, favoris) | **SQLite** en local (`NUXT_DATA_DIR/soprod.db`) ou **MySQL Hostinger** (`NUXT_DB_DRIVER=mysql` + `NUXT_MYSQL_*`) |
+| **Miniatures WebP** (grille, visionneuse, invités) | `NUXT_DATA_DIR/cache/<galerie>/` sur le serveur Node |
 
 - Les galeries ne chargent jamais d’image depuis la Box : seul le clic « Télécharger » ou la lecture d’un film passe par le serveur, en streaming (plages HTTP), sans jamais exposer l’adresse de la Box.
 - Box hors ligne : la consultation continue grâce au cache, les téléchargements affichent un message d’attente.
@@ -39,6 +39,12 @@ npm run dev               # http://localhost:3000
 3. Redirigez le port FTP/SFTP (et la plage de ports passifs en FTP) vers la Box. Si possible, limitez l’accès à l’adresse IP de l’hébergement.
 4. Renseignez dans `.env` : `NUXT_STORAGE_DRIVER=ftp` (ou `sftp`), `NUXT_STORAGE_HOST`, `NUXT_STORAGE_PORT`, `NUXT_STORAGE_USER`, `NUXT_STORAGE_PASSWORD`, `NUXT_STORAGE_SECURE=true`, `NUXT_STORAGE_ROOT`.
 5. Dans le back-office, le témoin en haut à droite indique si la Box répond.
+
+## Hostinger : les 3 bacs à configurer
+
+1. **FTP (photos)** — variables `NUXT_STORAGE_DRIVER=ftp` + hôte, utilisateur, mot de passe, `NUXT_STORAGE_ROOT` sur le disque de la Box (voir « Brancher la Box »). Les JPG ne sont pas stockés sur Hostinger.
+2. **Base du site (MySQL)** — hPanel › Bases de données › créer une base, puis variables : `NUXT_DB_DRIVER=mysql`, `NUXT_DB_MYSQL_HOST` (souvent `localhost` ou l’hôte indiqué par Hostinger), `NUXT_DB_MYSQL_DATABASE`, `NUXT_DB_MYSQL_USER`, `NUXT_DB_MYSQL_PASSWORD`. Les tables sont créées au premier démarrage.
+3. **Cache WebP** — dossier **inscriptible** `NUXT_DATA_DIR` (ex. `/home/u…/domains/…/private/soprod-cache`), sous-dossier `cache/`. Obligatoire en prod (même avec MySQL).
 
 ## Déployer
 

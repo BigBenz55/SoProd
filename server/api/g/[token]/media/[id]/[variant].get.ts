@@ -1,14 +1,15 @@
 import { existsSync, createReadStream, statSync } from 'node:fs'
+import { sqlRun } from '../../../../utils/sql-engine'
 
 export default defineEventHandler(async (event) => {
-  const access = requireViewer(event)
+  const access = await requireViewer(event)
   const mediaId = Number(getRouterParam(event, 'id'))
   const requested = getRouterParam(event, 'variant') as Variant
   if (!['thumb', 'large', 'public', 'poster'].includes(requested)) {
     throw createError({ statusCode: 404, message: 'Format inconnu' })
   }
 
-  const media = getMedia(access.gallery.id, mediaId)
+  const media = await getMedia(access.gallery.id, mediaId)
   if (!media) throw createError({ statusCode: 404, message: 'Fichier introuvable' })
 
   // Guests never receive the private high-definition proxy.
@@ -20,7 +21,7 @@ export default defineEventHandler(async (event) => {
     try {
       const buffer = await readToBuffer(await useBox().read(media.path))
       await buildImageVariants(access.gallery.id, media.id, buffer)
-      useDb().prepare('UPDATE media SET cached = 1 WHERE id = ?').run(media.id)
+      await sqlRun('UPDATE media SET cached = 1 WHERE id = ?', [media.id])
     } catch {
       throw createError({ statusCode: 503, message: 'Aperçu momentanément indisponible' })
     }

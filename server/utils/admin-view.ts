@@ -1,3 +1,5 @@
+import { sqlGet } from './sql-engine'
+
 export const EVENT_TYPES: EventType[] = ['mariage', 'corporate', 'studio']
 export const VALIDITY_PERMANENT = 0
 export const VALIDITY_CHOICES = [30, 60, 90, VALIDITY_PERMANENT]
@@ -6,12 +8,19 @@ export function isValidityChoice(days: number) {
   return VALIDITY_CHOICES.includes(Number(days))
 }
 
-const COUNTS_SQL = "SELECT COUNT(*) AS total, SUM(kind = 'image') AS images, SUM(kind = 'video') AS videos, SUM(favorite) AS favorites FROM media WHERE gallery_id = ?"
+const COUNTS_SQL =
+  "SELECT COUNT(*) AS total, SUM(kind = 'image') AS images, SUM(kind = 'video') AS videos, SUM(favorite) AS favorites FROM media WHERE gallery_id = ?"
 
 export async function adminGalleryView(g: GalleryRow) {
-  const counts = useDb()
-    .prepare(COUNTS_SQL)
-    .get(g.id) as { total: number; images: number | null; videos: number | null; favorites: number | null }
+  const counts = await sqlGet<{
+    total: number
+    images: number | null
+    videos: number | null
+    favorites: number | null
+  }>(COUNTS_SQL, [g.id])
+  if (!counts) {
+    throw createError({ statusCode: 500, message: 'Lecture des statistiques galerie impossible.' })
+  }
 
   return {
     id: g.id,
@@ -33,18 +42,18 @@ export async function adminGalleryView(g: GalleryRow) {
     createdAt: g.created_at,
     indexedAt: g.indexed_at,
     counts: {
-      total: counts.total,
-      images: counts.images ?? 0,
-      videos: counts.videos ?? 0,
-      favorites: counts.favorites ?? 0,
+      total: Number(counts.total),
+      images: Number(counts.images ?? 0),
+      videos: Number(counts.videos ?? 0),
+      favorites: Number(counts.favorites ?? 0),
     },
     cacheBytes: await cacheSize(g.id),
     job: getIndexJob(g.id),
   }
 }
 
-export function requireGallery(event: import('h3').H3Event) {
-  const g = getGallery(Number(getRouterParam(event, 'id')))
+export async function requireGallery(event: import('h3').H3Event) {
+  const g = await getGallery(Number(getRouterParam(event, 'id')))
   if (!g) throw createError({ statusCode: 404, message: 'Galerie introuvable' })
   return g
 }

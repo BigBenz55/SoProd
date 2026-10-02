@@ -6,7 +6,7 @@ import sharp from 'sharp'
  * never recognisable before the code is entered.
  */
 export default defineEventHandler(async (event) => {
-  const { gallery } = resolveAccess(event, getRouterParam(event, 'token'))
+  const { gallery } = await resolveAccess(event, getRouterParam(event, 'token'))
   if (isExpired(gallery) || !gallery.cover_media_id) throw createError({ statusCode: 404, message: 'Aucune couverture' })
 
   const file = variantPath(gallery.id, gallery.cover_media_id, 'thumb')

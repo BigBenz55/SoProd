@@ -1,5 +1,5 @@
-export default defineEventHandler((event) => {
-  const access = resolveAccess(event, getRouterParam(event, 'token'))
+export default defineEventHandler(async (event) => {
+  const access = await resolveAccess(event, getRouterParam(event, 'token'))
   const { gallery: g, role } = access
 
   const summary = {
@@ -14,7 +14,7 @@ export default defineEventHandler((event) => {
   if (isExpired(g) && !isAdmin(event)) return { state: 'expired' as const, role, gallery: summary }
   if (!access.unlocked) return { state: 'locked' as const, role, gallery: summary }
 
-  const media = listMedia(g.id)
+  const media = (await listMedia(g.id))
     .filter(m => m.cached || m.kind === 'video')
     .map(m => ({
       id: m.id,

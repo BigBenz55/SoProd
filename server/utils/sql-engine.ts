@@ -252,11 +252,25 @@ export function sqlNow() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ')
 }
 
+/** MySQL renvoie parfois BIGINT / Date : JSON.stringify échoue sans ça. */
+function normalizeSqlValue(value: unknown): unknown {
+  if (typeof value === 'bigint') return Number(value)
+  if (value instanceof Date) return value.toISOString().slice(0, 19).replace('T', ' ')
+  return value
+}
+
+function normalizeSqlRow<T>(row: RowDataPacket): T {
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(row)) out[key] = normalizeSqlValue(value)
+  return out as T
+}
+
 export async function sqlGet<T>(sql: string, params: unknown[] = []): Promise<T | undefined> {
   await initSqlEngine()
   if (driver === 'mysql') {
     const [rows] = await pool!.execute<RowDataPacket[]>(sql, params)
-    return (rows[0] as T) ?? undefined
+    const row = rows[0]
+    return row ? normalizeSqlRow<T>(row) : undefined
   }
   return sqlite!.prepare(sql).get(...params) as T | undefined
 }
@@ -265,7 +279,7 @@ export async function sqlAll<T>(sql: string, params: unknown[] = []): Promise<T[
   await initSqlEngine()
   if (driver === 'mysql') {
     const [rows] = await pool!.execute<RowDataPacket[]>(sql, params)
-    return rows as T[]
+    return rows.map(row => normalizeSqlRow<T>(row))
   }
   return sqlite!.prepare(sql).all(...params) as T[]
 }

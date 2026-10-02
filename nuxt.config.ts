@@ -23,7 +23,7 @@ export default defineNuxtConfig({
     sessionSecret: '',
     dataDir: './.data',
     /** mysql://user:pass@host:3306/nom_base — prioritaire sur NUXT_DB_MYSQL_* si défini */
-    databaseUrl: '',
+    databaseUrl: process.env.NUXT_DATABASE_URL || process.env.DATABASE_URL || '',
     db: {
       driver: 'sqlite',
       mysql: {

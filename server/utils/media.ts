@@ -62,11 +62,15 @@ export async function buildPoster(galleryId: number, mediaId: number, image: Buf
 }
 
 export async function cacheSize(galleryId: number) {
-  const dir = galleryCacheDir(galleryId)
-  if (!existsSync(dir)) return 0
-  let total = 0
-  for (const f of await fsp.readdir(dir)) total += (await fsp.stat(join(dir, f))).size
-  return total
+  try {
+    const dir = galleryCacheDir(galleryId)
+    if (!existsSync(dir)) return 0
+    let total = 0
+    for (const f of await fsp.readdir(dir)) total += (await fsp.stat(join(dir, f))).size
+    return total
+  } catch {
+    return 0
+  }
 }
 
 export async function purgeCache(galleryId: number) {

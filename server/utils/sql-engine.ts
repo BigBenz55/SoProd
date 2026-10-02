@@ -1,7 +1,7 @@
 import { createError } from 'h3'
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
+import type { DatabaseSync } from 'node:sqlite'
 import type { Pool, RowDataPacket } from 'mysql2/promise'
 import { createPool } from 'mysql2/promise'
 
@@ -104,7 +104,9 @@ interface MysqlConn {
 }
 
 function databaseUrlRaw() {
-  return String(useRuntimeConfig().databaseUrl || '').trim()
+  const fromConfig = String(useRuntimeConfig().databaseUrl || '').trim()
+  if (fromConfig) return fromConfig
+  return String(process.env.NUXT_DATABASE_URL || process.env.DATABASE_URL || '').trim()
 }
 
 function urlProtocol(url: string) {
@@ -170,7 +172,8 @@ function sqliteDbPath() {
   return dataPaths().db
 }
 
-function openSqlite() {
+async function openSqlite() {
+  const { DatabaseSync } = await import('node:sqlite')
   const dbPath = sqliteDbPath()
   try {
     mkdirSync(dirname(dbPath), { recursive: true })
@@ -202,18 +205,27 @@ async function openMysql() {
         'MySQL : définissez NUXT_DATABASE_URL (mysql://…) ou NUXT_DB_DRIVER=mysql avec NUXT_DB_MYSQL_HOST, NUXT_DB_MYSQL_DATABASE, NUXT_DB_MYSQL_USER, NUXT_DB_MYSQL_PASSWORD.',
     })
   }
-  pool = createPool({
-    host: mysql.host,
-    port: mysql.port,
-    database: mysql.database,
-    user: mysql.user,
-    password: mysql.password,
-    waitForConnections: true,
-    connectionLimit: 8,
-    charset: 'utf8mb4',
-  })
-  for (const stmt of MYSQL_STATEMENTS) {
-    await pool.execute(stmt)
+  try {
+    pool = createPool({
+      host: mysql.host,
+      port: mysql.port,
+      database: mysql.database,
+      user: mysql.user,
+      password: mysql.password,
+      waitForConnections: true,
+      connectionLimit: 8,
+      charset: 'utf8mb4',
+    })
+    await pool.execute('SELECT 1')
+    for (const stmt of MYSQL_STATEMENTS) {
+      await pool.execute(stmt)
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    throw createError({
+      statusCode: 500,
+      message: `Connexion MySQL impossible (${mysql.host}/${mysql.database}) : ${message}`,
+    })
   }
 }
 
@@ -226,7 +238,7 @@ export async function initSqlEngine() {
     const via = databaseUrlRaw() ? 'DATABASE_URL' : 'NUXT_DB_MYSQL_*'
     console.log(`[soprod] Base MySQL (${via}) : ${mysql.host}/${mysql.database}`)
   } else {
-    openSqlite()
+    await openSqlite()
     console.log(`[soprod] Base SQLite : ${sqliteDbPath()}`)
   }
   ready = true

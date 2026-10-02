@@ -214,7 +214,7 @@ onBeforeUnmount(() => {
   >
     <div
       v-if="current"
-      class="grain fixed inset-0 z-[70] flex flex-col bg-ink text-paper"
+      class="fixed inset-0 z-[70] flex flex-col bg-ink text-paper"
       role="dialog"
       aria-modal="true"
       :aria-label="`Visionneuse — ${current.filename}`"

@@ -61,8 +61,8 @@ function src(item: GalleryItem) {
             :alt="item.filename"
             loading="lazy"
             decoding="async"
-            class="size-full object-cover transition-[opacity,transform,filter] duration-[1.2s] ease-out-expo group-hover:scale-[1.025]"
-            :class="loaded.has(item.id) ? 'opacity-100 blur-0' : 'opacity-0 blur-sm'"
+            class="size-full object-cover transition-[opacity,transform] duration-500 ease-out-expo group-hover:scale-[1.025]"
+            :class="loaded.has(item.id) ? 'opacity-100' : 'opacity-0'"
             @load="loaded.add(item.id)"
           >
           <span v-if="item.kind === 'video'" class="absolute inset-0 grid place-items-center bg-ink/25 text-paper">

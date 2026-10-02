@@ -33,6 +33,13 @@ const crumbs = computed(() => {
   const parts = path.value.split('/').filter(Boolean)
   return [{ name: 'Racine', path: '/' }, ...parts.map((name, i) => ({ name, path: '/' + parts.slice(0, i + 1).join('/') }))]
 })
+
+const parentPath = computed(() => {
+  const parts = path.value.split('/').filter(Boolean)
+  if (!parts.length) return null
+  parts.pop()
+  return parts.length ? `/${parts.join('/')}` : '/'
+})
 </script>
 
 <template>
@@ -48,6 +55,12 @@ const crumbs = computed(() => {
     <p v-if="error" class="px-4 py-4 text-sm" role="alert">{{ error }}</p>
 
     <ul class="max-h-72 overflow-y-auto" :class="loading ? 'opacity-50' : ''" :aria-busy="loading">
+      <li v-if="parentPath">
+        <button class="flex w-full items-center gap-3 px-4 py-3 text-left text-graphite transition-colors hover:bg-mist" @click="load(parentPath)">
+          <SoIcon name="chevron-left" :size="18" />
+          <span class="flex-1">Dossier parent</span>
+        </button>
+      </li>
       <li v-for="d in listing?.dirs" :key="d.path">
         <button class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-mist" @click="load(d.path)">
           <SoIcon name="folder" :size="18" class="text-graphite" />

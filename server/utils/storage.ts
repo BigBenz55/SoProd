@@ -32,6 +32,20 @@ export function cleanRemotePath(input: string | undefined | null) {
   return normalised || '/'
 }
 
+/** Chemin logique admin (/) → chemin absolu sur la Box (respecte NUXT_STORAGE_ROOT). */
+export function joinStoragePath(root: string, logical: string) {
+  const base = cleanRemotePath(root || '/')
+  const path = cleanRemotePath(logical)
+  if (path === '/') return base
+  const tail = path.slice(1)
+  return base === '/' ? `/${tail}` : `${base}/${tail}`
+}
+
+export function childStoragePath(parent: string, name: string) {
+  const base = cleanRemotePath(parent)
+  return base === '/' ? `/${name}` : posix.join(base, name)
+}
+
 function limitBytes(maxBytes: number, onDone: () => void) {
   let seen = 0
   return new Transform({
@@ -111,7 +125,7 @@ class FtpDriver implements StorageDriver {
   constructor(private opts: RemoteOptions) {}
 
   private full(path: string) {
-    return posix.join(this.opts.root || '/', cleanRemotePath(path))
+    return joinStoragePath(this.opts.root, path)
   }
 
   private async connect() {
@@ -131,12 +145,16 @@ class FtpDriver implements StorageDriver {
     const client = await this.connect()
     try {
       const base = cleanRemotePath(dir)
-      const items = await client.list(this.full(base))
+      const remote = this.full(base)
+      await client.cd(remote)
+      const items = await client.list()
+      const parentName = base.split('/').filter(Boolean).pop()
       return items
         .filter(i => !i.name.startsWith('.'))
+        .filter(i => !(i.isDirectory && parentName && i.name === parentName))
         .map(i => ({
           name: i.name,
-          path: posix.join(base, i.name),
+          path: childStoragePath(base, i.name),
           type: i.isDirectory ? 'dir' : 'file',
           size: i.size,
         }) satisfies StorageEntry)
@@ -191,7 +209,7 @@ class SftpDriver implements StorageDriver {
   constructor(private opts: RemoteOptions) {}
 
   private full(path: string) {
-    return posix.join(this.opts.root || '/', cleanRemotePath(path))
+    return joinStoragePath(this.opts.root, path)
   }
 
   private async connect() {
@@ -212,11 +230,13 @@ class SftpDriver implements StorageDriver {
     try {
       const base = cleanRemotePath(dir)
       const items = await client.list(this.full(base))
+      const parentName = base.split('/').filter(Boolean).pop()
       return items
         .filter(i => !i.name.startsWith('.'))
+        .filter(i => !(i.type === 'd' && parentName && i.name === parentName))
         .map(i => ({
           name: i.name,
-          path: posix.join(base, i.name),
+          path: childStoragePath(base, i.name),
           type: i.type === 'd' ? 'dir' : 'file',
           size: i.size,
         }) satisfies StorageEntry)

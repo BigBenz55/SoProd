@@ -22,7 +22,7 @@ npm run dev               # http://localhost:3000
 | Élément | Où |
 |---|---|
 | **Originaux** (JPG, MP4…) | Disque de la **Box**, lus par le site via **FTP/FTPS ou SFTP** (`NUXT_STORAGE_*`) — ce n’est pas une base SQL |
-| **Métadonnées** (galeries, tokens, PIN, liste des fichiers, favoris) | **SQLite** en local (`NUXT_DATA_DIR/soprod.db`) ou **MySQL Hostinger** (`NUXT_DB_DRIVER=mysql` + `NUXT_MYSQL_*`) |
+| **Métadonnées** (galeries, tokens, PIN, liste des fichiers, favoris) | **SQLite** en local ou **MySQL** via `NUXT_DATABASE_URL=mysql://…` (ou `NUXT_DB_MYSQL_*`) |
 | **Miniatures WebP** (grille, visionneuse, invités) | `NUXT_DATA_DIR/cache/<galerie>/` sur le serveur Node |
 
 - Les galeries ne chargent jamais d’image depuis la Box : seul le clic « Télécharger » ou la lecture d’un film passe par le serveur, en streaming (plages HTTP), sans jamais exposer l’adresse de la Box.
@@ -43,7 +43,7 @@ npm run dev               # http://localhost:3000
 ## Hostinger : les 3 bacs à configurer
 
 1. **FTP (photos)** — variables `NUXT_STORAGE_DRIVER=ftp` + hôte, utilisateur, mot de passe, `NUXT_STORAGE_ROOT` sur le disque de la Box (voir « Brancher la Box »). Les JPG ne sont pas stockés sur Hostinger.
-2. **Base du site (MySQL)** — hPanel › Bases de données › créer une base, puis variables : `NUXT_DB_DRIVER=mysql`, `NUXT_DB_MYSQL_HOST` (souvent `localhost` ou l’hôte indiqué par Hostinger), `NUXT_DB_MYSQL_DATABASE`, `NUXT_DB_MYSQL_USER`, `NUXT_DB_MYSQL_PASSWORD`. Les tables sont créées au premier démarrage.
+2. **Base du site (MySQL)** — hPanel › Bases de données › créer une base, puis une URL unique : `NUXT_DATABASE_URL=mysql://user:motdepasse@localhost:3306/nom_base` (le driver MySQL est détecté automatiquement). Sinon : `NUXT_DB_DRIVER=mysql` + `NUXT_DB_MYSQL_*`. Les tables sont créées au premier démarrage.
 3. **Cache WebP** — dossier **inscriptible** `NUXT_DATA_DIR` (ex. `/home/u…/domains/…/private/soprod-cache`), sous-dossier `cache/`. Obligatoire en prod (même avec MySQL).
 
 ## Déployer

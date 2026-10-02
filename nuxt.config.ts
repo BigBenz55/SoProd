@@ -22,6 +22,8 @@ export default defineNuxtConfig({
     adminPassword: '',
     sessionSecret: '',
     dataDir: './.data',
+    /** mysql://user:pass@host:3306/nom_base — prioritaire sur NUXT_DB_MYSQL_* si défini */
+    databaseUrl: '',
     db: {
       driver: 'sqlite',
       mysql: {

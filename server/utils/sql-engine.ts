@@ -95,13 +95,83 @@ const MYSQL_STATEMENTS = [
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
 ]
 
+interface MysqlConn {
+  host: string
+  port: number
+  database: string
+  user: string
+  password: string
+}
+
+function databaseUrlRaw() {
+  return String(useRuntimeConfig().databaseUrl || '').trim()
+}
+
+function urlProtocol(url: string) {
+  return url.split(':')[0]?.toLowerCase() ?? ''
+}
+
+export function parseDatabaseUrl(url: string): { driver: DbDriver; mysql?: MysqlConn; sqliteFile?: string } {
+  const proto = urlProtocol(url)
+  if (proto === 'mysql' || proto === 'mysql2') {
+    const normalized = url.replace(/^mysql2:/i, 'mysql:')
+    const u = new URL(normalized)
+    const database = decodeURIComponent(u.pathname.replace(/^\//, ''))
+    if (!database) throw new Error('DATABASE_URL : nom de base manquant dans le chemin.')
+    return {
+      driver: 'mysql',
+      mysql: {
+        host: u.hostname,
+        port: u.port ? Number(u.port) : 3306,
+        database,
+        user: decodeURIComponent(u.username),
+        password: decodeURIComponent(u.password),
+      },
+    }
+  }
+  if (proto === 'sqlite' || proto === 'file') {
+    const u = new URL(url.replace(/^file:/, 'sqlite:'))
+    const sqliteFile = decodeURIComponent(u.pathname || u.hostname || './.data/soprod.db')
+    return { driver: 'sqlite', sqliteFile }
+  }
+  throw new Error(`DATABASE_URL non supportée (${proto}). Utilisez mysql:// ou sqlite:.`)
+}
+
 function configDriver(): DbDriver {
+  const url = databaseUrlRaw()
+  if (url) return parseDatabaseUrl(url).driver
   const d = String(useRuntimeConfig().db?.driver || 'sqlite').toLowerCase()
   return d === 'mysql' ? 'mysql' : 'sqlite'
 }
 
+function resolveMysqlConfig(): MysqlConn {
+  const url = databaseUrlRaw()
+  if (url) {
+    const parsed = parseDatabaseUrl(url)
+    if (parsed.driver !== 'mysql' || !parsed.mysql) throw new Error('DATABASE_URL attendue en mysql://')
+    return parsed.mysql
+  }
+  const mysql = useRuntimeConfig().db.mysql
+  return {
+    host: mysql.host,
+    port: Number(mysql.port) || 3306,
+    database: mysql.database,
+    user: mysql.user,
+    password: mysql.password,
+  }
+}
+
+function sqliteDbPath() {
+  const url = databaseUrlRaw()
+  if (url && urlProtocol(url) === 'sqlite' || url && urlProtocol(url) === 'file') {
+    const { sqliteFile } = parseDatabaseUrl(url)
+    return sqliteFile!
+  }
+  return dataPaths().db
+}
+
 function openSqlite() {
-  const { db: dbPath } = dataPaths()
+  const dbPath = sqliteDbPath()
   try {
     mkdirSync(dirname(dbPath), { recursive: true })
     sqlite = new DatabaseSync(dbPath)
@@ -118,17 +188,23 @@ function openSqlite() {
 }
 
 async function openMysql() {
-  const mysql = useRuntimeConfig().db.mysql
+  let mysql: MysqlConn
+  try {
+    mysql = resolveMysqlConfig()
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    throw createError({ statusCode: 500, message })
+  }
   if (!mysql.host || !mysql.database || !mysql.user) {
     throw createError({
       statusCode: 500,
       message:
-        'MySQL : renseignez NUXT_DB_DRIVER=mysql et NUXT_DB_MYSQL_HOST, NUXT_DB_MYSQL_DATABASE, NUXT_DB_MYSQL_USER, NUXT_DB_MYSQL_PASSWORD.',
+        'MySQL : définissez NUXT_DATABASE_URL (mysql://…) ou NUXT_DB_DRIVER=mysql avec NUXT_DB_MYSQL_HOST, NUXT_DB_MYSQL_DATABASE, NUXT_DB_MYSQL_USER, NUXT_DB_MYSQL_PASSWORD.',
     })
   }
   pool = createPool({
     host: mysql.host,
-    port: Number(mysql.port) || 3306,
+    port: mysql.port,
     database: mysql.database,
     user: mysql.user,
     password: mysql.password,
@@ -146,10 +222,12 @@ export async function initSqlEngine() {
   driver = configDriver()
   if (driver === 'mysql') {
     await openMysql()
-    console.log(`[soprod] Base MySQL : ${useRuntimeConfig().db.mysql.host}/${useRuntimeConfig().db.mysql.database}`)
+    const mysql = resolveMysqlConfig()
+    const via = databaseUrlRaw() ? 'DATABASE_URL' : 'NUXT_DB_MYSQL_*'
+    console.log(`[soprod] Base MySQL (${via}) : ${mysql.host}/${mysql.database}`)
   } else {
     openSqlite()
-    console.log(`[soprod] Base SQLite : ${dataPaths().db}`)
+    console.log(`[soprod] Base SQLite : ${sqliteDbPath()}`)
   }
   ready = true
 }

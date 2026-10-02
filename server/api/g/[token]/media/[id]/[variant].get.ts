@@ -1,5 +1,5 @@
 import { existsSync, createReadStream, statSync } from 'node:fs'
-import { sqlRun } from '../../../../utils/sql-engine'
+import { sqlRun } from '../../../../../utils/sql-engine'
 
 export default defineEventHandler(async (event) => {
   const access = await requireViewer(event)

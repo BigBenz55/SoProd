@@ -1,7 +1,6 @@
 import { sqlGet } from './sql-engine'
 
 export const EVENT_TYPES: EventType[] = ['mariage', 'corporate', 'studio']
-export const VALIDITY_PERMANENT = 0
 export const VALIDITY_CHOICES = [30, 60, 90, VALIDITY_PERMANENT]
 
 export function isValidityChoice(days: number) {

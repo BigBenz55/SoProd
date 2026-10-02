@@ -1,4 +1,4 @@
-import { dbDriver, sqlAll, sqlGet, sqlRun } from './sql-engine'
+import { resolvedDbDriver, sqlAll, sqlGet, sqlRun } from './sql-engine'
 
 export type EventType = 'mariage' | 'corporate' | 'studio'
 export type MediaKind = 'image' | 'video'
@@ -76,42 +76,38 @@ export async function insertGalleryRow(input: {
   is_demo?: number
 }) {
   const isDemo = input.is_demo ?? 0
-  if (dbDriver() === 'mysql') {
-    return sqlRun(
+  const params = [
+    input.name,
+    input.event_date,
+    input.event_type,
+    input.folder,
+    input.private_token,
+    input.public_token,
+    input.pin_hash,
+    input.public_download,
+    input.validity_days,
+    input.expires_at,
+    isDemo,
+  ]
+  if ((await resolvedDbDriver()) === 'mysql') {
+    const insertId = await sqlRun(
       `INSERT INTO galleries (name, event_date, event_type, folder, private_token, public_token, pin_hash, public_download, validity_days, expires_at, is_demo)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        input.name,
-        input.event_date,
-        input.event_type,
-        input.folder,
-        input.private_token,
-        input.public_token,
-        input.pin_hash,
-        input.public_download,
-        input.validity_days,
-        input.expires_at,
-        isDemo,
-      ],
+      params,
     )
+    if (insertId) return insertId
+    const row = await sqlGet<{ id: number }>(
+      'SELECT id FROM galleries WHERE private_token = ? ORDER BY id DESC LIMIT 1',
+      [input.private_token],
+    )
+    if (!row?.id) throw new Error('Création galerie : identifiant introuvable après INSERT.')
+    return Number(row.id)
   }
   const row = await sqlGet<{ id: number }>(
     `INSERT INTO galleries (name, event_date, event_type, folder, private_token, public_token, pin_hash, public_download, validity_days, expires_at, is_demo)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      RETURNING id`,
-    [
-      input.name,
-      input.event_date,
-      input.event_type,
-      input.folder,
-      input.private_token,
-      input.public_token,
-      input.pin_hash,
-      input.public_download,
-      input.validity_days,
-      input.expires_at,
-      isDemo,
-    ],
+    params,
   )
   if (!row) throw new Error('insert gallery failed')
   return row.id
@@ -126,7 +122,7 @@ export async function upsertMediaItem(input: {
   position: number
   poster_path: string | null
 }) {
-  if (dbDriver() === 'mysql') {
+  if ((await resolvedDbDriver()) === 'mysql') {
     await sqlRun(
       `INSERT INTO media (gallery_id, path, filename, kind, size_bytes, position, poster_path)
        VALUES (?, ?, ?, ?, ?, ?, ?)

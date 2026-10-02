@@ -260,6 +260,12 @@ export function dbDriver() {
   return driver
 }
 
+/** Toujours initialiser la base avant de lire le driver (évite le mauvais chemin SQLite sur le 1er INSERT). */
+export async function resolvedDbDriver() {
+  await initSqlEngine()
+  return driver
+}
+
 export function sqlNow() {
   return new Date().toISOString().slice(0, 19).replace('T', ' ')
 }
@@ -299,11 +305,16 @@ export async function sqlAll<T>(sql: string, params: unknown[] = []): Promise<T[
 
 export async function sqlRun(sql: string, params: unknown[] = []): Promise<number> {
   await initSqlEngine()
-  if (driver === 'mysql') {
-    const [result] = await pool!.execute(sql, params)
-    const header = result as { insertId?: number }
-    return Number(header.insertId ?? 0)
+  try {
+    if (driver === 'mysql') {
+      const [result] = await pool!.execute(sql, params)
+      const header = result as { insertId?: number }
+      return Number(header.insertId ?? 0)
+    }
+    const info = sqlite!.prepare(sql).run(...params) as { lastInsertRowid: number | bigint }
+    return Number(info.lastInsertRowid ?? 0)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    throw createError({ statusCode: 500, message: `SQL : ${message}` })
   }
-  const info = sqlite!.prepare(sql).run(...params) as { lastInsertRowid: number | bigint }
-  return Number(info.lastInsertRowid ?? 0)
 }

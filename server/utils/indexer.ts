@@ -1,4 +1,5 @@
 import { posix } from 'node:path'
+import type { StorageDriver } from './storage'
 import { sqlNow, sqlRun } from './sql-engine'
 
 export interface IndexJob {
@@ -23,12 +24,17 @@ export function waitForIndexing(galleryId: number) {
   return indexTasks.get(galleryId) ?? Promise.resolve()
 }
 
-async function walk(dir: string, depth = 0): Promise<StorageEntry[]> {
+async function collectStorageFiles(folder: string): Promise<StorageEntry[]> {
   const storage = useBox()
+  if (storage.walkDir) return storage.walkDir(folder, 3)
+  return walkStorageTree(storage, folder)
+}
+
+async function walkStorageTree(storage: StorageDriver, dir: string, depth = 0): Promise<StorageEntry[]> {
   const entries = await storage.list(dir)
   const files: StorageEntry[] = []
   for (const e of entries.sort((a, b) => a.name.localeCompare(b.name, 'fr', { numeric: true }))) {
-    if (e.type === 'dir' && depth < 3) files.push(...(await walk(e.path, depth + 1)))
+    if (e.type === 'dir' && depth < 3) files.push(...(await walkStorageTree(storage, e.path, depth + 1)))
     else if (e.type === 'file') files.push(e)
   }
   return files
@@ -68,7 +74,7 @@ async function runIndexing(job: IndexJob, force: boolean) {
   await sqlRun(`UPDATE galleries SET status = 'indexing', status_message = NULL WHERE id = ?`, [gallery.id])
 
   const storage = useBox()
-  const files = await walk(gallery.folder)
+  const files = await collectStorageFiles(gallery.folder)
 
   const byStem = new Map<string, StorageEntry>()
   for (const f of files) if (IMAGE_EXT.has(extOf(f.name))) byStem.set(f.path.slice(0, -extOf(f.name).length), f)
@@ -155,7 +161,8 @@ async function runIndexing(job: IndexJob, force: boolean) {
       job.done++
     }
   }
-  await Promise.all([worker(), worker()])
+  const workers = storage.kind === 'local' ? 2 : 1
+  await Promise.all(Array.from({ length: workers }, () => worker()))
 
   const g = await getGallery(gallery.id)
   if (g && (!g.cover_media_id || !keep.size || !rows.some(r => r.id === g.cover_media_id))) {

@@ -19,9 +19,20 @@ export interface ReadRange {
 export interface StorageDriver {
   readonly kind: 'local' | 'ftp' | 'sftp'
   list(dir: string): Promise<StorageEntry[]>
+  /** Une seule session FTP pour tout l’arbre (évite des centaines de connexions sur la Freebox). */
+  walkDir?(dir: string, maxDepth?: number): Promise<StorageEntry[]>
   size(path: string): Promise<number>
   read(path: string, range?: ReadRange): Promise<Readable>
   ping(): Promise<boolean>
+}
+
+function delay(ms: number) {
+  return new Promise<void>(resolve => setTimeout(resolve, ms))
+}
+
+function isTransientRemoteError(err: unknown) {
+  const msg = String(err instanceof Error ? err.message : err)
+  return /FIN packet|ECONNRESET|ETIMEDOUT|EPIPE|socket hang up|503|421|closed unexpectedly/i.test(msg)
 }
 
 /** Normalises a user-supplied remote path and refuses anything escaping the root. */
@@ -144,94 +155,181 @@ class FtpDriver implements StorageDriver {
   readonly kind = 'ftp' as const
   constructor(private opts: RemoteOptions) {}
 
+  /** La Freebox coupe les sessions FTP concurrentes (FIN packet). */
+  private busy = false
+  private waiters: (() => void)[] = []
+
+  private async acquire() {
+    while (this.busy) {
+      await new Promise<void>(resolve => this.waiters.push(resolve))
+    }
+    this.busy = true
+    return () => {
+      this.busy = false
+      this.waiters.shift()?.()
+    }
+  }
+
   private full(path: string) {
     return joinStoragePath(this.opts.root, path)
   }
 
   private async connect() {
-    const client = new FtpClient(20_000)
-    await client.access({
-      host: this.opts.host,
-      port: this.opts.port || 21,
-      user: this.opts.user,
-      password: this.opts.password,
-      secure: this.opts.secure,
-      secureOptions: { rejectUnauthorized: false },
-    })
-    return client
+    let last: unknown
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const client = new FtpClient(90_000)
+      try {
+        await client.access({
+          host: this.opts.host,
+          port: this.opts.port || 21,
+          user: this.opts.user,
+          password: this.opts.password,
+          secure: this.opts.secure,
+          secureOptions: { rejectUnauthorized: false },
+        })
+        return client
+      } catch (err) {
+        last = err
+        client.close()
+        if (attempt < 3 && isTransientRemoteError(err)) {
+          await delay(500 * (attempt + 1))
+          continue
+        }
+        throw err
+      }
+    }
+    throw last
+  }
+
+  private async listDir(client: FtpClient, dir: string) {
+    const base = cleanRemotePath(dir)
+    const remote = this.full(base)
+    await client.cd(remote)
+    const pwd = await client.pwd()
+    const items = await client.list()
+    const out: StorageEntry[] = []
+    for (const i of items) {
+      if (i.name.startsWith('.')) continue
+      const isDir = i.isDirectory
+      if (skipFtpDirLoop(base, this.opts.root, i.name, isDir)) continue
+      if (isDir) {
+        try {
+          await client.cd(i.name)
+          const nested = await client.pwd()
+          await client.cd(pwd)
+          if (nested.replace(/\/$/, '') === pwd.replace(/\/$/, '')) continue
+        } catch {
+          await client.cd(pwd).catch(() => {})
+        }
+      }
+      out.push({
+        name: i.name,
+        path: childStoragePath(base, i.name),
+        type: isDir ? 'dir' : 'file',
+        size: i.size,
+      })
+    }
+    return out
   }
 
   async list(dir: string) {
-    const client = await this.connect()
+    const release = await this.acquire()
     try {
-      const base = cleanRemotePath(dir)
-      const remote = this.full(base)
-      await client.cd(remote)
-      const pwd = await client.pwd()
-      const items = await client.list()
-      const out: StorageEntry[] = []
-      for (const i of items) {
-        if (i.name.startsWith('.')) continue
-        const isDir = i.isDirectory
-        if (skipFtpDirLoop(base, this.opts.root, i.name, isDir)) continue
-        if (isDir) {
-          try {
-            await client.cd(i.name)
-            const nested = await client.pwd()
-            await client.cd(pwd)
-            if (nested.replace(/\/$/, '') === pwd.replace(/\/$/, '')) continue
-          } catch {
-            await client.cd(pwd).catch(() => {})
+      const client = await this.connect()
+      try {
+        return await this.listDir(client, dir)
+      } finally {
+        client.close()
+      }
+    } finally {
+      release()
+    }
+  }
+
+  async walkDir(dir: string, maxDepth = 3) {
+    const release = await this.acquire()
+    try {
+      const client = await this.connect()
+      try {
+        const files: StorageEntry[] = []
+        const recurse = async (logical: string, depth: number) => {
+          const entries = await this.listDir(client, logical)
+          for (const e of entries.sort((a, b) => a.name.localeCompare(b.name, 'fr', { numeric: true }))) {
+            if (e.type === 'dir' && depth < maxDepth) await recurse(e.path, depth + 1)
+            else if (e.type === 'file') files.push(e)
           }
         }
-        out.push({
-          name: i.name,
-          path: childStoragePath(base, i.name),
-          type: isDir ? 'dir' : 'file',
-          size: i.size,
-        })
+        await recurse(cleanRemotePath(dir), 0)
+        return files
+      } finally {
+        client.close()
       }
-      return out
     } finally {
-      client.close()
+      release()
     }
   }
 
   async size(path: string) {
-    const client = await this.connect()
+    const release = await this.acquire()
     try {
-      return await client.size(this.full(path))
+      const client = await this.connect()
+      try {
+        return await client.size(this.full(path))
+      } finally {
+        client.close()
+      }
     } finally {
-      client.close()
+      release()
     }
   }
 
   async read(path: string, range: ReadRange = {}) {
-    const client = await this.connect()
+    const release = await this.acquire()
+    let released = false
+    let client: FtpClient
+    try {
+      client = await this.connect()
+    } catch (err) {
+      release()
+      throw err
+    }
+
+    const finish = () => {
+      if (released) return
+      released = true
+      client.close()
+      release()
+    }
+
     const start = range.start ?? 0
     const out = new PassThrough()
     let target: NodeJS.WritableStream = out
     if (range.end !== undefined) {
-      const limiter = limitBytes(range.end - start + 1, () => client.close())
+      const limiter = limitBytes(range.end - start + 1, finish)
       limiter.pipe(out)
       target = limiter
     }
-    out.on('close', () => client.close())
-    client
-      .downloadTo(target as any, this.full(path), start)
-      .then(() => client.close())
-      .catch((err) => {
-        client.close()
-        if (!out.writableEnded) out.destroy(err)
-      })
+
+    void client.downloadTo(target as any, this.full(path), start).then(
+      () => finish(),
+      (err) => {
+        finish()
+        if (!out.writableEnded) out.destroy(err instanceof Error ? err : new Error(String(err)))
+      },
+    )
     return out
   }
 
   async ping() {
     try {
-      const client = await this.connect()
-      client.close()
-      return true
+      const release = await this.acquire()
+      try {
+        const client = await this.connect()
+        client.close()
+        return true
+      } finally {
+        release()
+      }
     } catch {
       return false
     }

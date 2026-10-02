@@ -11,6 +11,7 @@ let driver: DbDriver = 'sqlite'
 let sqlite: DatabaseSync | null = null
 let pool: Pool | null = null
 let ready = false
+let initPromise: Promise<void> | null = null
 
 const SQLITE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS galleries (
@@ -215,6 +216,9 @@ async function openMysql() {
       waitForConnections: true,
       connectionLimit: 8,
       charset: 'utf8mb4',
+      decimalNumbers: true,
+      supportBigNumbers: true,
+      bigNumberStrings: true,
     })
     await pool.execute('SELECT 1')
     for (const stmt of MYSQL_STATEMENTS) {
@@ -229,8 +233,7 @@ async function openMysql() {
   }
 }
 
-export async function initSqlEngine() {
-  if (ready) return
+async function bootSqlEngine() {
   driver = configDriver()
   if (driver === 'mysql') {
     await openMysql()
@@ -242,6 +245,15 @@ export async function initSqlEngine() {
     console.log(`[soprod] Base SQLite : ${sqliteDbPath()}`)
   }
   ready = true
+}
+
+export async function initSqlEngine() {
+  if (ready) return
+  if (!initPromise) initPromise = bootSqlEngine().catch((err) => {
+    initPromise = null
+    throw err
+  })
+  await initPromise
 }
 
 export function dbDriver() {
@@ -256,6 +268,7 @@ export function sqlNow() {
 function normalizeSqlValue(value: unknown): unknown {
   if (typeof value === 'bigint') return Number(value)
   if (value instanceof Date) return value.toISOString().slice(0, 19).replace('T', ' ')
+  if (Buffer.isBuffer(value)) return value.toString('utf8')
   return value
 }
 

@@ -4,6 +4,8 @@ const emit = defineEmits<{ select: [path: string]; cancel: [] }>()
 
 interface Listing {
   path: string
+  boxRoot?: string
+  hint?: string
   dirs: { name: string; path: string }[]
   fileCount: number
   mediaCount: number
@@ -52,6 +54,7 @@ const parentPath = computed(() => {
       </template>
     </div>
 
+    <p v-if="listing?.hint" class="border-b border-line px-4 py-2 text-xs text-graphite">{{ listing.hint }}</p>
     <p v-if="error" class="px-4 py-4 text-sm" role="alert">{{ error }}</p>
 
     <ul class="max-h-72 overflow-y-auto" :class="loading ? 'opacity-50' : ''" :aria-busy="loading">

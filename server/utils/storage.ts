@@ -46,6 +46,26 @@ export function childStoragePath(parent: string, name: string) {
   return base === '/' ? `/${name}` : posix.join(base, name)
 }
 
+export function storageRootLabel(root: string) {
+  const abs = cleanRemotePath(root || '/')
+  return abs === '/' ? '/' : abs
+}
+
+function rootFolderName(root: string) {
+  const parts = cleanRemotePath(root || '/').split('/').filter(Boolean)
+  return parts.at(-1) ?? ''
+}
+
+/** Évite la boucle Freebox → Freebox sur certains serveurs FTP. */
+function skipFtpDirLoop(base: string, root: string, name: string, isDir: boolean) {
+  if (!isDir) return false
+  const parent = base.split('/').filter(Boolean).pop()
+  if (parent && name === parent) return true
+  const rootName = rootFolderName(root)
+  if (base === '/' && rootName && name === rootName && cleanRemotePath(root) !== '/') return true
+  return false
+}
+
 function limitBytes(maxBytes: number, onDone: () => void) {
   let seen = 0
   return new Transform({
@@ -147,17 +167,31 @@ class FtpDriver implements StorageDriver {
       const base = cleanRemotePath(dir)
       const remote = this.full(base)
       await client.cd(remote)
+      const pwd = await client.pwd()
       const items = await client.list()
-      const parentName = base.split('/').filter(Boolean).pop()
-      return items
-        .filter(i => !i.name.startsWith('.'))
-        .filter(i => !(i.isDirectory && parentName && i.name === parentName))
-        .map(i => ({
+      const out: StorageEntry[] = []
+      for (const i of items) {
+        if (i.name.startsWith('.')) continue
+        const isDir = i.isDirectory
+        if (skipFtpDirLoop(base, this.opts.root, i.name, isDir)) continue
+        if (isDir) {
+          try {
+            await client.cd(i.name)
+            const nested = await client.pwd()
+            await client.cd(pwd)
+            if (nested.replace(/\/$/, '') === pwd.replace(/\/$/, '')) continue
+          } catch {
+            await client.cd(pwd).catch(() => {})
+          }
+        }
+        out.push({
           name: i.name,
           path: childStoragePath(base, i.name),
-          type: i.isDirectory ? 'dir' : 'file',
+          type: isDir ? 'dir' : 'file',
           size: i.size,
-        }) satisfies StorageEntry)
+        })
+      }
+      return out
     } finally {
       client.close()
     }
